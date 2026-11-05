@@ -1,18 +1,15 @@
-version: "3.2"
 services:
-  python:
-    build:
-      context: './python/'
-      dockerfile: Dockerfile
+  web:
+    image: httpd:2.4
+    volumes:
+      - ./web/site:/usr/local/apache2/htdocs:ro
+
+  warcgen:
+    build: ./python
     depends_on:
-      - apache
+      - web
     volumes:
-    - ./web/site:/app/
-    - ./data:/output
-  apache:
-    image: httpd:latest
-    container_name: warc_generator
-    ports:
-    - '8080:80'
-    volumes:
-    - ./web/site:/usr/local/apache2/htdocs
+      - ./web/site:/site:ro
+      - ./data:/data
+    environment:
+      - INTERNAL_HOST=http://web/
