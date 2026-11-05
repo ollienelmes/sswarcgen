@@ -82,7 +82,7 @@ def warc_generator(warc_name: str, domain: str, site_dir: Path, output_dir: Path
     if warc_name.endswith((".warc", ".warc.gz")):
         filename = warc_name
     else:
-        filename = f"{warc_name}_archive.warc.gz"
+        filename = f"{warc_name}.warc.gz"
 
     output_dir.mkdir(parents=True, exist_ok=True)
     output_file = output_dir / filename
