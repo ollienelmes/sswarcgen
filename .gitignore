@@ -1,0 +1,8 @@
+.DS_Store
+.idea/
+
+*.warc
+*.warc.gz
+
+data/
+web/site/

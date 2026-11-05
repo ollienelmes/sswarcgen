@@ -1,0 +1,18 @@
+version: "3.2"
+services:
+  python:
+    build:
+      context: './python/'
+      dockerfile: Dockerfile
+    depends_on:
+      - apache
+    volumes:
+    - ./web/site:/app/
+    - ./data:/output
+  apache:
+    image: httpd:latest
+    container_name: warc_generator
+    ports:
+    - '8080:80'
+    volumes:
+    - ./web/site:/usr/local/apache2/htdocs
