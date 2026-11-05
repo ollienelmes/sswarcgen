@@ -54,11 +54,7 @@ You only need to run this command for the first use.
 docker compose run --rm warcgen
 ```
 
-By default, this generates:
-
-```text
-data/WebArchive.warc.gz
-```
+By default, this generates: `data/WebArchive.warc.gz`
 
 ### 3. Stop the web server
 
@@ -87,8 +83,6 @@ Configuration can be supplied using environment variables or command-line argume
 |---|---|---|---|
 | Archive name | `-n`, `--name` | `WARC_NAME` | `WebArchive` |
 | Target URL | `-u`, `--url` | `TARGET_URL` | `http://localhost` |
-| Site directory | `-s`, `--site-dir` | `SITE_DIR` | `/site` |
-
 
 ### Example
 
