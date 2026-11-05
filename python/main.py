@@ -112,10 +112,16 @@ def warc_generator(warc_name: str, domain: str, site_dir: Path, output_dir: Path
             if write_url_to_warc(writer, session, internal_url, warc_url):
                 records_written += 1
 
-            if rel_path == "index.html" or rel_path.endswith("/index.html"):
-                dir_rel = rel_path[:-len("index.html")]
+            if Path(rel_path).name.lower() in ("index.html", "index.htm"):
+                dir_rel = str(Path(rel_path).parent)
+                if dir_rel == ".":
+                    dir_rel = ""
+                else:
+                    dir_rel += "/"
+
                 dir_internal_url = urljoin(base_internal, dir_rel)
                 dir_warc_url = urljoin(base_domain, dir_rel)
+
                 if write_url_to_warc(writer, session, dir_internal_url, dir_warc_url):
                     records_written += 1
 
