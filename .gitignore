@@ -4,5 +4,8 @@
 *.warc
 *.warc.gz
 
-data/
-web/site/
+data/*
+!data/.gitkeep
+
+web/site/*
+!web/site/.gitkeep
