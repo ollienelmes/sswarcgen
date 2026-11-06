@@ -3,6 +3,7 @@ import os
 import sys
 import time
 import logging
+import subprocess
 from pathlib import Path
 from urllib.parse import urljoin
 import requests
@@ -38,6 +39,11 @@ def parse_args():
         "--internal-host",
         default=os.environ.get("INTERNAL_HOST", "http://web/"),
         help="Internal HTTP server URL serving the static site."
+    )
+    parser.add_argument(
+        "--wacz",
+        action="store_true",
+        help="Package into a WACZ file and delete the intermediate WARC."
     )
     parser.add_argument(
         "-v", "--verbose",
@@ -82,7 +88,7 @@ def write_url_to_warc(writer, session, internal_url: str, warc_url: str) -> bool
     writer.write_record(record)
     return True
 
-def warc_generator(warc_name: str, domain: str, site_dir: Path, output_dir: Path, internal_host: str, verbose: bool):
+def warc_generator(warc_name: str, domain: str, site_dir: Path, output_dir: Path, internal_host: str, verbose: bool, create_wacz: bool):
     base_domain = domain if domain.endswith("/") else f"{domain}/"
     base_internal = internal_host if internal_host.endswith("/") else f"{internal_host}/"
 
@@ -90,6 +96,8 @@ def warc_generator(warc_name: str, domain: str, site_dir: Path, output_dir: Path
         filename = warc_name
     else:
         filename = f"{warc_name}.warc.gz"
+
+    wacz_filename = filename.replace(".warc.gz", "").replace(".warc", "") + ".wacz"
 
     output_dir.mkdir(parents=True, exist_ok=True)
     output_file = output_dir / filename
@@ -102,9 +110,14 @@ def warc_generator(warc_name: str, domain: str, site_dir: Path, output_dir: Path
         logging.warning(f"No files found in {site_dir}")
         return
 
+    if create_wacz:
+        output_file_label = output_dir / (filename.replace(".warc.gz", "").replace(".warc", "") + ".wacz")
+    else:
+        output_file_label = output_file
+
     logging.info(f"Starting WARC generation...")
     logging.info(f"Target URL: {base_domain}")
-    logging.info(f"Output File Destination: {output_file}")
+    logging.info(f"Output File Destination: {output_file_label}")
     logging.info(f"Total files to process: {total_files}")
 
     records_written = 0
@@ -158,10 +171,35 @@ def warc_generator(warc_name: str, domain: str, site_dir: Path, output_dir: Path
                     records_written += 1
 
     logging.info("========================================")
-    logging.info(f"WARC Generation Complete.")
+    logging.info(f"WARC file generated.")
     logging.info(f"Processed: {total_files} files.")
-    logging.info(f"Written: {records_written} WARC response records (includes index aliases).")
-    logging.info(f"Saved to: {output_file} ({output_file.stat().st_size / (1024 * 1024):.2f} MB)")
+    logging.info(f"Written: {records_written} response records.")
+
+    if not create_wacz:
+        logging.info(f"Saved to: {output_file} ({output_file.stat().st_size / (1024 * 1024):.2f} MB)")
+    else:
+        wacz_file = output_dir / wacz_filename
+        logging.info("========================================")
+        logging.info(f"Packaging WARC into WACZ format...")
+        try:
+            # Generate the WACZ
+            subprocess.run(
+                ["wacz", "create", "-f", str(output_file), "-o", str(wacz_file), "--detect-pages"],
+                check=True,
+                stdout=subprocess.DEVNULL if not verbose else None
+            )
+            # Delete the intermediate WARC file
+            output_file.unlink()
+            
+            logging.info(f"WACZ created successfully. Temporary WARC deleted.")
+            logging.info(f"Saved to: {wacz_file} ({wacz_file.stat().st_size / (1024 * 1024):.2f} MB)")
+        except subprocess.CalledProcessError as e:
+            logging.error(f"Failed to generate WACZ file (Exit code {e.returncode}).")
+            logging.info(f"Retained fallback WARC file: {output_file}")
+        except FileNotFoundError:
+            logging.error("The 'wacz' CLI tool was not found. Did you add it to your Dockerfile?")
+            logging.info(f"Retained fallback WARC file: {output_file}")
+
 
 if __name__ == "__main__":
     start_time = time.time()
@@ -181,7 +219,8 @@ if __name__ == "__main__":
         site_dir=Path(args.site_dir),
         output_dir=Path(args.output_dir),
         internal_host=args.internal_host,
-        verbose=args.verbose
+        verbose=args.verbose,
+        create_wacz=args.wacz
     )
     
     elapsed = time.time() - start_time

@@ -84,6 +84,7 @@ Configuration can be supplied using environment variables or command-line argume
 | Archive name | `-n`, `--name` | `WARC_NAME` | `WebArchive` |
 | Target URL | `-u`, `--url` | `TARGET_URL` | `http://localhost` |
 | Verbose logging | `-v`, `--verbose` |  | Disabled |
+| WACZ file generation | `--wacz` |  | Disabled |
 
 ### Example
 
@@ -128,5 +129,7 @@ The Python application uses:
 
 - [Requests](https://requests.readthedocs.io/) – HTTP requests.
 - [warcio](https://github.com/webrecorder/warcio) – WARC file generation.
+- [tqdm](https://github.com/tqdm/tqdm) – CLI progress bar.
+- [wacz](https://github.com/webrecorder/specs) - WACZ file converter.
 
 The Python Docker image installs these dependencies automatically.
