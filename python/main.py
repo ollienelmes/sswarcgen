@@ -9,12 +9,6 @@ import requests
 from warcio.warcwriter import WARCWriter
 from warcio.statusandheaders import StatusAndHeaders
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S"
-)
-
 def parse_args():
     parser = argparse.ArgumentParser(
         description="Generate a WARC archive from a static site."
@@ -43,6 +37,11 @@ def parse_args():
         "--internal-host",
         default=os.environ.get("INTERNAL_HOST", "http://web/"),
         help="Internal HTTP server URL serving the static site."
+    )
+    parser.add_argument(
+        "-v", "--verbose",
+        action="store_true",
+        help="Enable verbose line-by-line logging."
     )
     return parser.parse_args()
 
@@ -104,8 +103,8 @@ def warc_generator(warc_name: str, domain: str, site_dir: Path, output_dir: Path
 
     logging.info(f"Starting WARC generation...")
     logging.info(f"Target URL: {base_domain}")
-    logging.info(f"Output File: {output_file}")
-    logging.info(f"Total physical files to process: {total_files}")
+    logging.info(f"Output File Destination: {output_file}")
+    logging.info(f"Total files to process: {total_files}")
 
     records_written = 0
     session = requests.Session()
@@ -119,13 +118,13 @@ def warc_generator(warc_name: str, domain: str, site_dir: Path, output_dir: Path
             "description": f"Static site archive for {base_domain}"
         })
         writer.write_record(warcinfo)
-        logging.info("Wrote warcinfo metadata record.")
+        logging.debug("Wrote warcinfo metadata record.")
 
         for idx, rel_path in enumerate(rel_files, start=1):
             internal_url = urljoin(base_internal, rel_path)
             warc_url = urljoin(base_domain, rel_path)
 
-            logging.info(f"[{idx}/{total_files}] Archiving: {rel_path}")
+            logging.debug(f"[{idx}/{total_files}] Archiving: {rel_path}")
 
             if write_url_to_warc(writer, session, internal_url, warc_url):
                 records_written += 1
@@ -141,20 +140,28 @@ def warc_generator(warc_name: str, domain: str, site_dir: Path, output_dir: Path
                 dir_internal_url = urljoin(base_internal, dir_rel)
                 dir_warc_url = urljoin(base_domain, dir_rel)
 
-                logging.info(f"  -> Appending directory alias response: {dir_warc_url}")
+                logging.debug(f"  -> Appending directory alias response: {dir_warc_url}")
 
                 if write_url_to_warc(writer, session, dir_internal_url, dir_warc_url):
                     records_written += 1
 
     logging.info("========================================")
     logging.info(f"WARC Generation Complete.")
-    logging.info(f"Processed: {total_files} physical files.")
+    logging.info(f"Processed: {total_files} files.")
     logging.info(f"Written: {records_written} WARC response records (includes index aliases).")
-    logging.info(f"Saved to: {output_file}")
+    logging.info(f"Saved to: {output_file} ({output_file.stat().st_size / (1024 * 1024):.2f} MB)")
 
 if __name__ == "__main__":
     start_time = time.time()
     args = parse_args()
+
+    # Set log level based on verbose flag
+    log_level = logging.DEBUG if args.verbose else logging.INFO
+    logging.basicConfig(
+        level=log_level,
+        format="%(asctime)s [%(levelname)s] %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S"
+    )
 
     warc_generator(
         warc_name=args.name,

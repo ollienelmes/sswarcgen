@@ -83,13 +83,15 @@ Configuration can be supplied using environment variables or command-line argume
 |---|---|---|---|
 | Archive name | `-n`, `--name` | `WARC_NAME` | `WebArchive` |
 | Target URL | `-u`, `--url` | `TARGET_URL` | `http://localhost` |
+| Verbose logging | `-v`, `--verbose` |  | Disabled |
 
 ### Example
 
 ```bash
 docker compose run --rm warcgen \
   --name ArchiveNameHere \
-  --url https://example.com/ 
+  --url https://example.com/ \
+  -v
 ```
 
 This generates:
@@ -103,6 +105,8 @@ With all pages using the internal URLs:
 ```text
 https://example.com/
 ```
+
+The`-v` (or `--verbose`) flag will output a line-by-line log of every file as it is fetched and recorded. Without it, the application only prints a high-level summary of the job at startup and completion.
 
 ### Archive naming
 
