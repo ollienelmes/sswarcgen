@@ -71,7 +71,7 @@ As a more concise command after the initial setup you can run a command such as 
 ```bash
 docker compose run --rm warcgen \
   --name ArchiveNameHere \
-  -url https://example.com/ \
+  --url https://example.com/ \
   && docker compose down
 ```
 
@@ -89,7 +89,7 @@ Configuration can be supplied using environment variables or command-line argume
 ```bash
 docker compose run --rm warcgen \
   --name ArchiveNameHere \
-  -url https://example.com/ 
+  --url https://example.com/ 
 ```
 
 This generates:
