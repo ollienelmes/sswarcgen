@@ -8,6 +8,7 @@ from urllib.parse import urljoin
 import requests
 from warcio.warcwriter import WARCWriter
 from warcio.statusandheaders import StatusAndHeaders
+from tqdm import tqdm
 
 def parse_args():
     parser = argparse.ArgumentParser(
@@ -81,7 +82,7 @@ def write_url_to_warc(writer, session, internal_url: str, warc_url: str) -> bool
     writer.write_record(record)
     return True
 
-def warc_generator(warc_name: str, domain: str, site_dir: Path, output_dir: Path, internal_host: str):
+def warc_generator(warc_name: str, domain: str, site_dir: Path, output_dir: Path, internal_host: str, verbose: bool):
     base_domain = domain if domain.endswith("/") else f"{domain}/"
     base_internal = internal_host if internal_host.endswith("/") else f"{internal_host}/"
 
@@ -120,7 +121,18 @@ def warc_generator(warc_name: str, domain: str, site_dir: Path, output_dir: Path
         writer.write_record(warcinfo)
         logging.debug("Wrote warcinfo metadata record.")
 
-        for idx, rel_path in enumerate(rel_files, start=1):
+        # Wrap the loop with a tqdm progress bar
+        progress_iterator = tqdm(
+            enumerate(rel_files, start=1), 
+            total=total_files, 
+            disable=verbose, 
+            desc="Archiving files", 
+            unit="file",
+            leave=False,
+            bar_format="{l_bar}{bar:30}{r_bar}"
+        )
+
+        for idx, rel_path in progress_iterator:
             internal_url = urljoin(base_internal, rel_path)
             warc_url = urljoin(base_domain, rel_path)
 
@@ -168,7 +180,8 @@ if __name__ == "__main__":
         domain=args.url,
         site_dir=Path(args.site_dir),
         output_dir=Path(args.output_dir),
-        internal_host=args.internal_host
+        internal_host=args.internal_host,
+        verbose=args.verbose
     )
     
     elapsed = time.time() - start_time
