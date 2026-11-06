@@ -2,11 +2,18 @@ import argparse
 import os
 import sys
 import time
+import logging
 from pathlib import Path
 from urllib.parse import urljoin
 import requests
 from warcio.warcwriter import WARCWriter
 from warcio.statusandheaders import StatusAndHeaders
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S"
+)
 
 def parse_args():
     parser = argparse.ArgumentParser(
@@ -41,7 +48,7 @@ def parse_args():
 
 def get_relative_files(site_dir: Path):
     if not site_dir.exists():
-        print(f"Error: Site directory '{site_dir}' does not exist.", file=sys.stderr)
+        logging.error(f"Site directory '{site_dir}' does not exist.")
         sys.exit(1)
 
     files = []
@@ -59,7 +66,7 @@ def write_url_to_warc(writer, session, internal_url: str, warc_url: str) -> bool
             timeout=10
         )
     except requests.RequestException as exc:
-        print(f"[!] Failed to fetch {internal_url}: {exc}", file=sys.stderr)
+        logging.error(f"Failed to fetch {internal_url}: {exc}")
         return False
 
     headers_list = list(resp.raw.headers.items())
@@ -89,8 +96,16 @@ def warc_generator(warc_name: str, domain: str, site_dir: Path, output_dir: Path
     is_gzip = output_file.name.endswith(".gz")
 
     rel_files = get_relative_files(site_dir)
+    total_files = len(rel_files)
+    
     if not rel_files:
-        print(f"Warning: No files found in {site_dir}", file=sys.stderr)
+        logging.warning(f"No files found in {site_dir}")
+        return
+
+    logging.info(f"Starting WARC generation...")
+    logging.info(f"Target URL: {base_domain}")
+    logging.info(f"Output File: {output_file}")
+    logging.info(f"Total physical files to process: {total_files}")
 
     records_written = 0
     session = requests.Session()
@@ -104,14 +119,18 @@ def warc_generator(warc_name: str, domain: str, site_dir: Path, output_dir: Path
             "description": f"Static site archive for {base_domain}"
         })
         writer.write_record(warcinfo)
+        logging.info("Wrote warcinfo metadata record.")
 
-        for rel_path in rel_files:
+        for idx, rel_path in enumerate(rel_files, start=1):
             internal_url = urljoin(base_internal, rel_path)
             warc_url = urljoin(base_domain, rel_path)
+
+            logging.info(f"[{idx}/{total_files}] Archiving: {rel_path}")
 
             if write_url_to_warc(writer, session, internal_url, warc_url):
                 records_written += 1
 
+            # Handle directory aliases for index files
             if Path(rel_path).name.lower() in ("index.html", "index.htm"):
                 dir_rel = str(Path(rel_path).parent)
                 if dir_rel == ".":
@@ -122,11 +141,16 @@ def warc_generator(warc_name: str, domain: str, site_dir: Path, output_dir: Path
                 dir_internal_url = urljoin(base_internal, dir_rel)
                 dir_warc_url = urljoin(base_domain, dir_rel)
 
+                logging.info(f"  -> Appending directory alias response: {dir_warc_url}")
+
                 if write_url_to_warc(writer, session, dir_internal_url, dir_warc_url):
                     records_written += 1
 
-    print(f"{len(rel_files)} files processed ({records_written} WARC response records written)")
-    print(f"Output saved to: {output_file}")
+    logging.info("========================================")
+    logging.info(f"WARC Generation Complete.")
+    logging.info(f"Processed: {total_files} physical files.")
+    logging.info(f"Written: {records_written} WARC response records (includes index aliases).")
+    logging.info(f"Saved to: {output_file}")
 
 if __name__ == "__main__":
     start_time = time.time()
@@ -139,4 +163,6 @@ if __name__ == "__main__":
         output_dir=Path(args.output_dir),
         internal_host=args.internal_host
     )
-    print(f"--- {time.time() - start_time:.2f} seconds to run ---")
+    
+    elapsed = time.time() - start_time
+    logging.info(f"Total execution time: {elapsed:.2f} seconds")
