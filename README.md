@@ -141,9 +141,21 @@ For these issues of case sensitivity you can use the `case-fix-links` tool that 
 
 You can use the `-v` or `--verbose` flag to run the `case-fix-links` service to see exactly which files are being updated.
 
-`docker compose run --rm case-fix-links -v`
+```bash
+docker compose run --rm case-fix-links -v
+```
 
 After running this command you should be able to run the usual WARC generation commands. 
+
+## Updating the tool
+
+If you download a newer version of `sswarcgen` or pull the latest changes via `git pull`, you must rebuild the Docker images for the updates to take effect. 
+
+Because Docker caches your previous build, it will not automatically apply changes made within the scripts folder `python/` until you run:
+
+```bash
+docker compose build
+```
 
 ## Dependencies
 
