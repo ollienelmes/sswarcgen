@@ -4,6 +4,6 @@ WORKDIR /app
 
 RUN pip install --no-cache-dir requests warcio tdqm wacz
 
-COPY main.py .
+COPY *.py .
 
 ENTRYPOINT ["python", "main.py"]

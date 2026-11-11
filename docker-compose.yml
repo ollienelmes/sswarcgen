@@ -13,3 +13,9 @@ services:
       - ./data:/data
     environment:
       - INTERNAL_HOST=http://web/
+
+  case-fix-links:
+    build: ./python
+    volumes:
+      - ./web/site:/site
+    entrypoint: ["python", "case-fix-links.py"]

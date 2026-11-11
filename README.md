@@ -6,12 +6,16 @@ It uses Docker Compose to run an Apache web server alongside a Python applicatio
 
 ## How it works
 
-The application uses two Docker services:
+The application uses two primary Docker services:
 
 - **web** – Apache HTTP Server serves the static website.
 - **warcgen** – Python application retrieves the website files and generates the WARC archive.
 
-The static website directory is shared between both containers. The generated archives are written to a local `data` directory.
+There is an optional service that can be used to help reformat broken links:
+
+- **case-fix-links** – An optional utility to normalize case-sensitive links before archiving.
+
+The static website directory is shared between the containers. The generated archives are written to a local `data` directory.
 
 ## Requirements
 
@@ -122,6 +126,24 @@ The archive filename depends on the supplied name:
 Files ending in `.gz` are gzip-compressed.
 
 If no file extensions are supplied in the name argument it will be by default a zipped WARC.
+
+## Reformatting the site
+
+In the case of certain old sites and depending on how the source files have been preserved it may be necessary to make certain alterations to the source files (under `web/site/`) to ensure that the capture archive replays correctly. To support these 
+
+### Broken internal links
+
+If there are broken internal links, you should first check that those expected files actually exist. If they do and it's still not working, then it may be broken due to an issue of case sensitivity. For example an internal link that points to `href="About/index.html"` will not be able to resolve within the WARC replayer if the actual file exists in `about/index.html`.
+
+For these issues of case sensitivity you can use the `case-fix-links` tool that is included. When this service is run then it makes necessary modifications to the static site files that exist under `web/site/`.
+
+#### Example
+
+You can use the `-v` or `--verbose` flag to run the `case-fix-links` service to see exactly which files are being updated.
+
+`docker compose run --rm case-fix-links -v`
+
+After running this command you should be able to run the usual WARC generation commands. 
 
 ## Dependencies
 
