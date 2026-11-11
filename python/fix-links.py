@@ -4,7 +4,7 @@ import re
 import logging
 from pathlib import Path
 
-def lowercase_site(site_dir_path):
+def link_fix_site(site_dir_path):
     site_dir = Path(site_dir_path)
     if not site_dir.exists():
         logging.error(f"Site directory '{site_dir}' does not exist.")
@@ -13,20 +13,21 @@ def lowercase_site(site_dir_path):
     logging.info(f"Targeting directory: {site_dir}")
     
     # ==========================================
-    # PHASE 1: Fix Internal HTML Links
+    # PHASE 1: Fix Internal HTML Links (Case & Spaces)
     # ==========================================
     logging.info("Phase 1: Scanning and fixing HTML links...")
     
     link_pattern = re.compile(r'(href|src)\s*=\s*(["\'])(.*?)\2', re.IGNORECASE)
 
-    def lowercase_url(match):
+    def normalize_url(match):
         attr = match.group(1)
         quote = match.group(2)
         url = match.group(3)
         
-        # Only lowercase internal links (skip external sites, mailto, etc.)
+        # Only modify internal links
         if not url.lower().startswith(('http://', 'https://', 'mailto:')):
-            url = url.lower()
+            # Lowercase and replace both literal spaces and %20 with hyphens
+            url = url.lower().replace('%20', '-').replace(' ', '-')
             
         return f'{attr}={quote}{url}{quote}'
 
@@ -61,7 +62,7 @@ def lowercase_site(site_dir_path):
                 continue
 
             try:
-                new_text = link_pattern.sub(lowercase_url, original_text)
+                new_text = link_pattern.sub(normalize_url, original_text)
                 
                 if original_text != new_text:
                     html_file.write_text(new_text, encoding=used_encoding)
@@ -73,32 +74,34 @@ def lowercase_site(site_dir_path):
     logging.info(f"Phase 1 Complete: Modified internal links in {files_fixed} web files.")
     
     # ==========================================
-    # PHASE 2: Rename Files and Folders
+    # PHASE 2: Rename Files and Folders (Case & Spaces)
     # ==========================================
-    logging.info("Phase 2: Renaming files and folders to lowercase...")
+    logging.info("Phase 2: Renaming files and folders to lowercase and replacing spaces...")
     
     paths = list(site_dir.rglob("*"))
-    # Sort by path depth descending (deepest first) to avoid breaking child paths when renaming parents
     paths.sort(key=lambda x: len(x.parts), reverse=True)
 
     items_renamed = 0
     for path in paths:
-        if path.name != path.name.lower():
-            new_path = path.parent / path.name.lower()
+        # Calculate the new name: lowercase AND spaces replaced with hyphens
+        new_name = path.name.lower().replace(' ', '-')
+        
+        if path.name != new_name:
+            new_path = path.parent / new_name
             
             # The Two-Step Rename: Bypass macOS/Windows case-insensitivity bugs
-            tmp_path = path.parent / f"{path.name.lower()}.tmp"
+            tmp_path = path.parent / f"{new_name}.tmp"
             path.rename(tmp_path)          # Step 1: Rename to .tmp
-            tmp_path.rename(new_path)      # Step 2: Rename to final lowercase
+            tmp_path.rename(new_path)      # Step 2: Rename to final lowercase/hyphenated
             
             logging.debug(f"Renamed: {path.name} -> {new_path.name}")
             items_renamed += 1
 
     logging.info(f"Phase 2 Complete: Renamed {items_renamed} files/directories.")
-    logging.info("Case-fix complete! You can now run the WARC generator.")
+    logging.info("Link fixing complete! You can now run the WARC generator.")
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Normalize HTML links and filenames to lowercase.")
+    parser = argparse.ArgumentParser(description="Fix HTML links and filenames (lowercase and remove spaces).")
     parser.add_argument(
         "-s", "--site-dir",
         default=os.environ.get("SITE_DIR", "/site"),
@@ -111,7 +114,6 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
     
-    # Set log level based on verbose flag
     log_level = logging.DEBUG if args.verbose else logging.INFO
     logging.basicConfig(
         level=log_level,
@@ -119,4 +121,4 @@ if __name__ == "__main__":
         datefmt="%Y-%m-%d %H:%M:%S"
     )
     
-    lowercase_site(args.site_dir)
+    link_fix_site(args.site_dir)

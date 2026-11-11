@@ -18,4 +18,4 @@ services:
     build: ./python
     volumes:
       - ./web/site:/site
-    entrypoint: ["python", "case-fix-links.py"]
+    entrypoint: ["python", "fix-links.py"]

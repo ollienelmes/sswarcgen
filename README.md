@@ -13,7 +13,7 @@ The application uses two primary Docker services:
 
 There is an optional service that can be used to help reformat broken links:
 
-- **case-fix-links** – An optional utility to normalize case-sensitive links before archiving.
+- **fix-links** – An optional utility to normalize case-sensitive links before archiving.
 
 The static website directory is shared between the containers. The generated archives are written to a local `data` directory.
 
@@ -133,16 +133,16 @@ In the case of certain old sites and depending on how the source files have been
 
 ### Broken internal links
 
-If there are broken internal links, you should first check that those expected files actually exist. If they do and it's still not working, then it may be broken due to an issue of case sensitivity. For example an internal link that points to `href="About/index.html"` will not be able to resolve within the WARC replayer if the actual file exists in `about/index.html`.
+If there are broken internal links, you should first check that those expected files actually exist. If they do and it's still not working, then it may be broken due to an issue of case sensitivity or incorrectly formatted spaces. For example an internal link that points to `href="About/index.html"` will not be able to resolve within the WARC replayer if the actual file exists in `about/index.html`.
 
-For these issues of case sensitivity you can use the `case-fix-links` tool that is included. When this service is run then it makes necessary modifications to the static site files that exist under `web/site/`.
+For these issues of case sensitivity and poorly formatted spaces within links you can use the `fix-links` tool that is included. When this service is run then it makes necessary modifications to the static site files that exist under `web/site/` making all files and links lowercase and replacing any spaces with hyphens.
 
 #### Example
 
-You can use the `-v` or `--verbose` flag to run the `case-fix-links` service to see exactly which files are being updated.
+You can use the `-v` or `--verbose` flag to run the `fix-links` service to see exactly which files are being updated.
 
 ```bash
-docker compose run --rm case-fix-links -v
+docker compose run --rm fix-links -v
 ```
 
 After running this command you should be able to run the usual WARC generation commands. 
