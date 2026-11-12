@@ -14,7 +14,7 @@ services:
     environment:
       - INTERNAL_HOST=http://web/
 
-  case-fix-links:
+  fix-links:
     build: ./python
     volumes:
       - ./web/site:/site
