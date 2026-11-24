@@ -1,17 +1,20 @@
 import argparse
-import os
-import sys
-import time
-import logging
-import subprocess
-import json
 import io
+import json
+import logging
+import os
+import subprocess
+import sys
+import tempfile
+import time
 from pathlib import Path
-from urllib.parse import urljoin
+from urllib.parse import quote, urljoin
+
 import requests
-from warcio.warcwriter import WARCWriter
-from warcio.statusandheaders import StatusAndHeaders
 from tqdm import tqdm
+from warcio.statusandheaders import StatusAndHeaders
+from warcio.warcwriter import WARCWriter
+
 
 def parse_args():
     parser = argparse.ArgumentParser(
@@ -34,7 +37,7 @@ def parse_args():
     )
     parser.add_argument(
         "-o", "--output-dir",
-        default=os.environ.get("OUTPUT_DIR", '/data'),
+        default=os.environ.get("OUTPUT_DIR", "/data"),
         help="Directory to write the output WARC file (default: /data)."
     )
     parser.add_argument(
@@ -54,6 +57,7 @@ def parse_args():
     )
     return parser.parse_args()
 
+
 def get_relative_files(site_dir: Path):
     if not site_dir.exists():
         logging.error(f"Site directory '{site_dir}' does not exist.")
@@ -61,9 +65,12 @@ def get_relative_files(site_dir: Path):
 
     files = []
     for item in sorted(site_dir.rglob("*")):
-        if item.is_file() and not any(part.startswith(".") for part in item.parts):
-            files.append(item.relative_to(site_dir).as_posix())
+        if item.is_file():
+            rel_path = item.relative_to(site_dir)
+            if not any(part.startswith(".") for part in rel_path.parts):
+                files.append(rel_path.as_posix())
     return files
+
 
 def write_url_to_warc(writer, session, internal_url: str, warc_url: str, is_page: bool, pages_list: list) -> bool:
     try:
@@ -80,16 +87,14 @@ def write_url_to_warc(writer, session, internal_url: str, warc_url: str, is_page
     payload_bytes = resp.content
 
     # Strip hop-by-hop headers that break WARC replay indexing
-    headers_list = []
-    for k, v in resp.headers.items():
-        if k.lower() not in ("transfer-encoding", "content-encoding", "connection"):
-            headers_list.append((k, v))
-            
+    headers_list = [
+        (k, v) for k, v in resp.headers.items()
+        if k.lower() not in ("transfer-encoding", "content-encoding", "connection", "content-length")
+    ]
     # Guarantee the Content-Length matches our downloaded payload exactly
-    headers_list = [h for h in headers_list if h[0].lower() != "content-length"]
     headers_list.append(("Content-Length", str(len(payload_bytes))))
 
-    status_line = f"{resp.status_code} {resp.status_reason if hasattr(resp, 'status_reason') else resp.reason}"
+    status_line = f"{resp.status_code} {resp.reason or ''}".strip()
     http_headers = StatusAndHeaders(status_line, headers_list, protocol="HTTP/1.1")
 
     record = writer.create_warc_record(
@@ -100,14 +105,15 @@ def write_url_to_warc(writer, session, internal_url: str, warc_url: str, is_page
         http_headers=http_headers
     )
     writer.write_record(record)
-    
+
     # If this is designated as an HTML page, add it to our WACZ pages index
     if is_page and resp.status_code == 200:
         pages_list.append({"url": warc_url, "title": warc_url})
-        
+
     return True
 
-def warc_generator(warc_name: str, domain: str, site_dir: Path, output_dir: Path, internal_host: str, verbose: bool, create_wacz: bool):
+
+def warc_generator(warc_name: str, domain: str, site_dir: Path, output_dir: Path, internal_host: str, verbose: bool, create_wacz: bool) -> int:
     base_domain = domain if domain.endswith("/") else f"{domain}/"
     base_internal = internal_host if internal_host.endswith("/") else f"{internal_host}/"
 
@@ -116,36 +122,32 @@ def warc_generator(warc_name: str, domain: str, site_dir: Path, output_dir: Path
     else:
         filename = f"{warc_name}.warc.gz"
 
-    wacz_filename = filename.replace(".warc.gz", "").replace(".warc", "") + ".wacz"
+    wacz_filename = filename.removesuffix(".warc.gz").removesuffix(".warc") + ".wacz"
 
     output_dir.mkdir(parents=True, exist_ok=True)
     output_file = output_dir / filename
+    wacz_file = output_dir / wacz_filename
     is_gzip = output_file.name.endswith(".gz")
 
     rel_files = get_relative_files(site_dir)
     total_files = len(rel_files)
-    
+
     if not rel_files:
         logging.warning(f"No files found in {site_dir}")
-        return
+        return 0
 
-    if create_wacz:
-        output_file_label = output_dir / (filename.replace(".warc.gz", "").replace(".warc", "") + ".wacz")
-    else:
-        output_file_label = output_file
+    output_file_label = wacz_file if create_wacz else output_file
 
-    logging.info(f"Starting WARC generation...")
+    logging.info("Starting WARC generation...")
     logging.info(f"Target URL: {base_domain}")
     logging.info(f"Output File Destination: {output_file_label}")
     logging.info(f"Total files to process: {total_files}")
 
     records_written = 0
-    session = requests.Session()
-    
-    # Keep track of entry points for the WACZ menu
+    failed_count = 0
     pages_list = []
 
-    with open(output_file, "wb") as output:
+    with requests.Session() as session, open(output_file, "wb") as output:
         writer = WARCWriter(output, gzip=is_gzip)
 
         warcinfo = writer.create_warcinfo_record(output_file.name, {
@@ -156,74 +158,74 @@ def warc_generator(warc_name: str, domain: str, site_dir: Path, output_dir: Path
         writer.write_record(warcinfo)
         logging.debug("Wrote warcinfo metadata record.")
 
-        # Wrap the loop with a tqdm progress bar
         progress_iterator = tqdm(
-            enumerate(rel_files, start=1), 
-            total=total_files, 
-            disable=verbose, 
-            desc="Archiving files", 
+            enumerate(rel_files, start=1),
+            total=total_files,
+            disable=verbose,
+            desc="Archiving files",
             unit="file",
             leave=False,
             bar_format="{l_bar}{bar:30}{r_bar}"
         )
 
         for idx, rel_path in progress_iterator:
-            internal_url = urljoin(base_internal, rel_path)
-            warc_url = urljoin(base_domain, rel_path)
-            
+            encoded_path = quote(rel_path, safe="/")
+            internal_url = urljoin(base_internal, encoded_path)
+            warc_url = urljoin(base_domain, encoded_path)
+
             is_html = rel_path.lower().endswith((".html", ".htm"))
+            is_index = is_html and Path(rel_path).name.lower() in ("index.html", "index.htm")
 
             logging.debug(f"[{idx}/{total_files}] Archiving: {rel_path}")
 
-            if write_url_to_warc(writer, session, internal_url, warc_url, is_page=is_html, pages_list=pages_list):
+            # For index files, only add the canonical directory URL to pages_list to avoid duplicates
+            if write_url_to_warc(writer, session, internal_url, warc_url, is_page=(is_html and not is_index), pages_list=pages_list):
                 records_written += 1
+            else:
+                failed_count += 1
 
             # Handle directory aliases for index files
-            if is_html and Path(rel_path).name.lower() in ("index.html", "index.htm"):
-                dir_rel = str(Path(rel_path).parent)
-                if dir_rel == ".":
-                    dir_rel = ""
-                else:
-                    dir_rel += "/"
+            if is_index:
+                dir_rel = Path(rel_path).parent.as_posix()
+                dir_rel = "" if dir_rel == "." else f"{dir_rel}/"
 
-                dir_internal_url = urljoin(base_internal, dir_rel)
-                dir_warc_url = urljoin(base_domain, dir_rel)
+                encoded_dir = quote(dir_rel, safe="/")
+                dir_internal_url = urljoin(base_internal, encoded_dir)
+                dir_warc_url = urljoin(base_domain, encoded_dir)
 
                 logging.debug(f"  -> Appending directory alias response: {dir_warc_url}")
 
                 if write_url_to_warc(writer, session, dir_internal_url, dir_warc_url, is_page=True, pages_list=pages_list):
                     records_written += 1
+                else:
+                    failed_count += 1
 
     logging.info("========================================")
-    logging.info(f"WARC file generated.")
+    logging.info("WARC file generated.")
     logging.info(f"Processed: {total_files} files.")
     logging.info(f"Written: {records_written} response records.")
+    if failed_count > 0:
+        logging.warning(f"Failed: {failed_count} requests.")
 
     if not create_wacz:
         logging.info(f"Saved to: {output_file} ({output_file.stat().st_size / (1024 * 1024):.2f} MB)")
     else:
-        wacz_file = output_dir / wacz_filename
-        
-        # Write the pages.jsonl file to inject into the WACZ
-        pages_file = output_dir / "pages.jsonl"
-        with open(pages_file, "w", encoding="utf-8") as pf:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".jsonl", encoding="utf-8", delete=False) as pf:
+            pages_file = Path(pf.name)
             for page in pages_list:
                 pf.write(json.dumps(page) + "\n")
-                
+
         logging.info("========================================")
-        logging.info(f"Packaging WARC into WACZ format...")
+        logging.info("Packaging WARC into WACZ format...")
         try:
-            # Generate the WACZ using the explicit pages index
             subprocess.run(
                 ["wacz", "create", "-f", str(output_file), "-o", str(wacz_file), "-p", str(pages_file)],
                 check=True,
                 stdout=subprocess.DEVNULL if not verbose else None
             )
-            # Delete the intermediate files
             output_file.unlink()
-            pages_file.unlink()
-            
-            logging.info(f"WACZ created successfully. Temporary WARC deleted.")
+
+            logging.info("WACZ created successfully. Temporary WARC deleted.")
             logging.info(f"Saved to: {wacz_file} ({wacz_file.stat().st_size / (1024 * 1024):.2f} MB)")
         except subprocess.CalledProcessError as e:
             logging.error(f"Failed to generate WACZ file (Exit code {e.returncode}).")
@@ -231,13 +233,16 @@ def warc_generator(warc_name: str, domain: str, site_dir: Path, output_dir: Path
         except FileNotFoundError:
             logging.error("The 'wacz' CLI tool was not found.")
             logging.info(f"Retained fallback WARC file: {output_file}")
+        finally:
+            pages_file.unlink(missing_ok=True)
+
+    return failed_count
 
 
 if __name__ == "__main__":
     start_time = time.time()
     args = parse_args()
 
-    # Set log level based on verbose flag
     log_level = logging.DEBUG if args.verbose else logging.INFO
     logging.basicConfig(
         level=log_level,
@@ -245,7 +250,7 @@ if __name__ == "__main__":
         datefmt="%Y-%m-%d %H:%M:%S"
     )
 
-    warc_generator(
+    failures = warc_generator(
         warc_name=args.name,
         domain=args.url,
         site_dir=Path(args.site_dir),
@@ -254,6 +259,9 @@ if __name__ == "__main__":
         verbose=args.verbose,
         create_wacz=args.wacz
     )
-    
+
     elapsed = time.time() - start_time
     logging.info(f"Total execution time: {elapsed:.2f} seconds")
+
+    if failures > 0:
+        sys.exit(1)
