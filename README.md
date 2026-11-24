@@ -129,23 +129,31 @@ If no file extensions are supplied in the name argument it will be by default a 
 
 ## Reformatting the site
 
-In the case of certain old sites and depending on how the source files have been preserved it may be necessary to make certain alterations to the source files (under `web/site/`) to ensure that the capture archive replays correctly. To support these 
+Depending on how an older site's source files have been preserved, it may be necessary to make alterations to the files under `web/site/` so that the captured archive replays correctly.
 
 ### Broken internal links
 
-If there are broken internal links, you should first check that those expected files actually exist. If they do and it's still not working, then it may be broken due to an issue of case sensitivity or incorrectly formatted spaces. For example an internal link that points to `href="About/index.html"` will not be able to resolve within the WARC replayer if the actual file exists in `about/index.html`.
+If there are broken internal links, first check that the expected target files exist. If they do, the issue is often caused by case sensitivity or spaces in paths—for example, an internal link pointing to `href="About/index.html"` will fail to resolve in a WARC replayer if the file on disk is `about/index.html`.
 
-For these issues of case sensitivity and poorly formatted spaces within links you can use the `fix-links` tool that is included. When this service is run then it makes necessary modifications to the static site files that exist under `web/site/` making all files and links lowercase and replacing any spaces with hyphens.
+The optional `fix-links` service resolves these issues by modifying files in `web/site/` in place: lowercasing internal link paths and filenames, and replacing spaces (` ` and `%20`) with hyphens (`-`). External URLs, `data:`/`mailto:`/`tel:`/`javascript:` links, query strings, and `#fragment` anchors are left untouched, and any rename that would overwrite an existing file is skipped with a warning.
+
+> **Note:** `fix-links` is isolated under a Docker Compose `tools` profile, so it will not run automatically during `docker compose up`.
+
+#### Options
+
+| Setting | Argument | Default | Description |
+|---|---|---|---|
+| Dry run | `--dry-run` | Disabled | Preview link and filename changes without modifying any files. |
+| Verbose logging | `-v`, `--verbose` | Disabled | Output line-by-line logs of every file updated or renamed. |
+| Site directory | `-s`, `--site-dir` | `/site` | Directory containing the static site files (`SITE_DIR`). |
 
 #### Example
 
-You can use the `-v` or `--verbose` flag to run the `fix-links` service to see exactly which files are being updated.
+Because `fix-links` edits files in place, it is good practice to preview the changes first with `--dry-run`:
 
 ```bash
-docker compose run --rm fix-links -v
+docker compose run --rm fix-links --dry-run
 ```
-
-After running this command you should be able to run the usual WARC generation commands. 
 
 ## Updating the tool
 
