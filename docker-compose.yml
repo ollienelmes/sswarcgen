@@ -16,6 +16,7 @@ services:
 
   fix-links:
     build: ./python
+    profiles: ["tools"]
     volumes:
       - ./web/site:/site
     entrypoint: ["python", "fix-links.py"]
